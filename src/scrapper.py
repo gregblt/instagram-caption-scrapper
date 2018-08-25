@@ -20,60 +20,98 @@ import re
 import emoji
 import sys, traceback
 import csv
+from selenium.webdriver.firefox.options import Options
+
+
+
 
 def scrap_post(post_link,config,driver):    
-
-
-#    
-    driver.get(post_link)
+   
+    #driver.get(post_link)
+    r=requests.get(post_link)
+    if(r.status_code==200):
+        soup=BeautifulSoup(r.content,'lxml')     			
+        objects = json.loads(str(soup).split('<script type="text/javascript">window._sharedData = ')[1].split(';</script>')[0])["entry_data"]["PostPage"][0]["graphql"]['shortcode_media']
+   
     
     # URL
-    post_url = post_link
+    post_url=None
+    if(config["post_link"]):
+        post_url = post_link
     
 
-    if(config["full_caption"] or config["numb_of_char"] or config["numb_of_words"] or config["emojis"] or 
-       config["emojis_count"] or config["tag_accounts"] or config["tag_accounts_count"] or
-       config["hashtags"] or config["hashtags_count"]):
+    caption=None
+    emojis=None
+    number_of_emojis=None
+    hashtags=None
+    number_of_hashtags=None
+    mentions=None
+    number_of_mentions=None
+    number_of_chars=None
+    number_of_words=None
+    if(config["full_caption"] or config["numb_of_char"] or config["numb_of_words"] or
+       config["emojis"] or config["emojis_count"] or
+       config["hashtags"] or config["hashtags_count"] or 
+       config["mentions"] or config["mentions_count"] ):
+        
         try:
-            element = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "C4VMK"))
-            )
-            caption=element.find_element_by_tag_name("span").text 
+            caption=objects["edge_media_to_caption"]["edges"][0]["node"]["text"]
         except:
             caption=""
         
-        number_of_chars=len(caption) if config["numb_of_char"] else None
-        number_of_words=len(caption.split()) if config["numb_of_words"] else None
+
         # Emojis
         def extract_emojis(str):
           return ''.join(c for c in str if c in emoji.UNICODE_EMOJI)
         
         if(config["emojis"] or config["emojis_count"]):
             emojis=extract_emojis(caption) 
-            number_of_emojis=len(emojis) if config["emojis_count"] else None
-            emojis = None if not config["emojis"] else emojis
-            
-        # Mention
-        if(config["tag_accounts"] or config["tag_accounts_count"]):
-            lst=re.findall(r'@([a-zA-Z0-9._]+)',caption)
-            tagged_people=[]
-            if(len(lst)>0):
-                lst=[x.lower() for x in lst]
-                tagged_people=list(set(lst))
-            number_of_tagged_people=len(tagged_people) if config["tag_accounts_count"] else None
-            tagged_people=None if not config["tag_accounts"] else tagged_people
-                               
+        number_of_emojis=len(emojis) if config["emojis_count"] else None
+                                      
         # Hashtags
+        hashtags=[]
         if(config["hashtags"] or config["hashtags_count"]):
             lst=re.findall(r'#([^\s]+)',caption)
-            hashtags=[]
             if(len(lst)>0):
                 lst=[x.lower() for x in lst]
                 hashtags=list(set(lst))
-            number_of_hashtags=len(hashtags) if config["hashtags_count"] else None
-            hashtags = None if not config["hashtags"] else hashtags
-            
+        number_of_hashtags=len(hashtags) if config["hashtags_count"] else None
+        
+        # Mentions
+        mentions=[]
+        if(config["mentions"] or config["mentions_count"]):
+            lst=re.findall(r'@([a-zA-Z0-9._]+)',caption)
+            if(len(lst)>0):
+                lst=[x.lower() for x in lst]
+                mentions=list(set(lst))
+        number_of_mentions=len(mentions) if config["mentions_count"] else None
+        
+        temp_caption=caption
+        # Remove emojis
+        for emoji1 in emojis:
+            temp_caption=temp_caption.replace(emoji1,"")
+        # Remove hashtags
+        for hashtag in hashtags:
+            temp_caption=temp_caption.replace("#"+hashtag,"")
+        # Remove mention
+        for mention in mentions:
+            temp_caption=temp_caption.replace("@"+mention,"")
+        
+        number_of_chars=len(temp_caption) if config["numb_of_char"] else None
+        number_of_words=len(temp_caption.split()) if config["numb_of_words"] else None
+        mentions = None if not config["mentions"] else ",".join(mentions)
+        emojis = None if not config["emojis"] else emojis
+        hashtags = None if not config["hashtags"] else ",".join(hashtags)
         caption = None if not config["full_caption"] else caption
+        
+    # Mention
+    tagged_people=[]
+    if(config["tag_accounts"] or config["tag_accounts_count"]):
+        for user in objects["edge_media_to_tagged_user"]["edges"]:
+            tagged_people.append(user["node"]["user"]["username"])
+            
+    number_of_tagged_people=len(tagged_people) if config["tag_accounts_count"] else None
+    tagged_people=None if not config["tag_accounts"] else ",".join(tagged_people)
 
 #        self.config={'likes_count':bool(self.var_likes_count.get()),
 #                 'comments_count':bool(self.var_comments_count.get()),
@@ -90,69 +128,66 @@ def scrap_post(post_link,config,driver):
 #                 "numb_of_char":bool(self.var_numb_of_char.get()),
 #                 "full_caption":bool(self.var_full_caption.get())
 #        }  
-        
+
     # Comments count
     comments=None
     if(config["comments_count"]):
-        r=requests.get(post_link)
-        if(r.status_code==200):
-            soup=BeautifulSoup(r.content,'lxml')     			
-            objects = json.loads(str(soup).split('<script type="text/javascript">window._sharedData = ')[1].split(';</script>')[0])
-            comments = objects["entry_data"]["PostPage"][0]["graphql"]['shortcode_media']["edge_media_to_comment"]["count"]
+        comments = objects["edge_media_to_comment"]["count"]
             
         
     # Exact time
+    week   = ['Monday', 
+              'Tuesday', 
+              'Wednesday', 
+              'Thursday',  
+              'Friday', 
+              'Saturday',
+              'Sunday']
+    date_string=None
     time_string=None
-    if(config["datetime"]):
-        time1 = driver.find_element_by_tag_name('time').get_attribute('datetime')
-        time1=time1[0:19]
+    day_string=None
+    month_string=None
+    time1 = objects["taken_at_timestamp"]  
+    if(config["datetime"]):          
+        datetime_string=datetime.utcfromtimestamp(time1).strftime('%m.%d.%Y|%H:%M:%S')
+        date_string=datetime_string[0:10]
+        time_string=datetime_string[11:21]
+    if(config["weekday"]):  
+        day_string=week[datetime.utcfromtimestamp(time1).weekday()]
+    if(config["month"]):  
+        month_string=datetime.utcfromtimestamp(time1).strftime("%B")
         
-        datetime_object = datetime.strptime(time1, '%Y-%m-%dT%H:%M:%S')
-        time_string=datetime_object.strftime('%m_%d_%Y at %H:%M:%S')
-    
-
+    # Likes 
+    likes=None
+    if(config["likes_count"]):
+        likes=objects["edge_media_preview_like"]["count"]
     
     # Post type
-    post_type=None
-    likes=None
+    post_type=None    
+    video_duration=None    
+    views=None
+    number_of_content=None
+    if(objects["__typename"]=="GraphImage"):
+        if(config["post_type"]):
+            post_type="image"
+    elif(objects["__typename"]=="GraphVideo"):
+        if(config["post_type"]):
+            post_type="video"
+        if(config["video_duration"]):
+            video_duration=objects["video_duration"]
+        if(config["video_views"]):
+            views=objects["video_view_count"]
+    elif(objects["__typename"]=="GraphSidecar"):
+        if(config["post_type"]):
+            post_type="gallery"
+        if(config["content_count"]):
+            number_of_content=len(objects["edge_sidecar_to_children"]["edges"])
     
 
-    article=driver.find_elements_by_tag_name("article")
-    
-    article_soup=BeautifulSoup(article[0].get_attribute("innerHTML"),'lxml')
-    likes=None
-    
-    if(len(str(article_soup).split("kPFhm B1JlO"))>1):
-        try:
-            driver.execute_script("window.scrollTo(0, %s);" % (driver.find_element_by_class_name("vcOH2").location["y"]-100))
-            driver.find_element_by_class_name("vcOH2").click()
-            if(config["likes_count"]):
-                likes=int(driver.find_element_by_class_name("vJRqr").find_element_by_tag_name("span").text.replace(',',''))       
-            post_type='video'
-        except NoSuchElementException:
-            if(config["likes_count"]):
-                likes=int(driver.find_element_by_class_name("zV_Nj").find_element_by_tag_name("span").text.replace(',',''))
-            post_type='gallery'
-            pass
-    elif(len(str(article_soup).split("eLAPa kPFhm"))>1 or len(str(article_soup).split("eLAPa _23QFA"))>1):
-        if(config["likes_count"]):
-            likes=int(driver.find_element_by_class_name("zV_Nj").find_element_by_tag_name("span").text.replace(',',''))
-        post_type='photo'
-    elif(len(str(article_soup).split("rQDP3"))>1):
-        if(config["likes_count"]):
-            likes=int(driver.find_element_by_class_name("zV_Nj").find_element_by_tag_name("span").text.replace(',',''))
-        post_type='gallery'
-        
-
-    
-    # Location
-    loc=None
     location_link=None
-    if(config["location"]):
-        locs=driver.find_elements_by_class_name("O4GlU")
-        location_link=None
-        for loc in locs:
-            location_link=loc.get_attribute('href')
+    if(config["location"] and 'location' in objects):
+        if(not objects["location"] == None):
+            location_link="https://www.instagram.com/explore/locations/%s/%s/" % (objects["location"]["id"],objects["location"]["slug"])
         
     
     return {"post_url":post_url,
@@ -166,10 +201,18 @@ def scrap_post(post_link,config,driver):
             "tagged_accounts":tagged_people,
             "number_of_tagged_accounts":number_of_tagged_people,
             "location_url":location_link,
-            "datetime":time_string,
+            "date":date_string,
+            "time":time_string,
             "post_type":post_type,
             "likes":likes,
-            "comments":comments
+            "comments":comments,
+             "mentions":mentions,
+             "mentions_count":number_of_mentions,
+             "weekday":day_string,
+             "month":month_string,
+             "video_duration":video_duration,
+             "content_count":number_of_content,
+             "video_views":views
             }
 
 def get_post_list(username,N,driver):
@@ -184,6 +227,10 @@ def get_post_list(username,N,driver):
         	number_of_followers=objects['edge_followed_by']['count']
 
     driver.get('https://www.instagram.com/'+username)
+	
+    elems=driver.find_elements_by_class_name("error-container.-cx-PRIVATE-ErrorPage__errorContainer.-cx-PRIVATE-ErrorPage__errorContainer__")
+    if(len(elems)>0):
+        return {"number_of_followers":0,"list":[]}
     
     end=False
     post_count=0
@@ -218,6 +265,8 @@ def get_post_list(username,N,driver):
                 if(post_count==N):
                     end=True
                     break
+                else:
+                    print('%s/%s' % (post_count,N))
             if(end):
                 break
     
@@ -226,23 +275,32 @@ def get_post_list(username,N,driver):
     return {"number_of_followers":number_of_followers,"list":list_a}
 
 def scrap(accounts,N,config,output_folder):
+    options = Options()
+    options.add_argument("--headless")
     driver = webdriver.Firefox()
+    #driver = webdriver.Firefox(firefox_options=options)
     output_folder=output_folder.replace("\n","")
     data=[]
     for account in accounts:
+        data=[]
         try:
-            res=get_post_list(account,N,driver)    
+            res=get_post_list(account,N,driver)  
+            cnt=0
             for link in res["list"]:
                 scrap=scrap_post(link,config,driver)
                 scrap["engagement_rate"]= (scrap["likes"] + scrap["comments"]) / res["number_of_followers"] if config["engagement_rate"] else None
+                scrap["full_caption"]=scrap["full_caption"].replace("\n","") if config["full_caption"] else None
                 data.append(scrap)
+                time.sleep(1)
+                cnt+=1
+                print('%s/%s' % (cnt,N))
         except Exception as e:
             print(e)
             traceback.print_exc(file=sys.stdout)
             pass
                 
-        with open(output_folder+"/"+account+".csv","w") as f:
-            spamwriter = csv.writer(f, delimiter=',')
+        with open(output_folder+"/"+account+".csv","w",encoding="utf-8",newline='') as f:
+            spamwriter = csv.writer(f, delimiter=',',quotechar='"',quoting=csv.QUOTE_ALL)
             spamwriter.writerow(['Post URL',
                                  'Full Caption',
                                  '# Of Chars',
@@ -257,8 +315,17 @@ def scrap(accounts,N,config,output_folder):
                                  'Tagged Accounts',
                                  '# Of Tagged Accounts',
                                  'Location URL',
-                                 'Datetime',
-                                 'Post Type'])
+                                 'Date',
+                                 'Time',
+                                 'Day',
+                                 'Month',
+                                 'Post Type',
+                                 'Mentions',
+                                 '# Of Mentions',
+                                 'Video Duration',
+                                 'Video Views',
+                                 '# Of Content'
+                                 ])
             for row in data:
                 spamwriter.writerow([row["post_url"],
                 row["full_caption"],
@@ -274,8 +341,16 @@ def scrap(accounts,N,config,output_folder):
                 row["tagged_accounts"],
                 row["number_of_tagged_accounts"],
                 row["location_url"],
-                row["datetime"],
+                row["date"],
+                row["time"],
+                row['weekday'],
+                row['month'],
                 row["post_type"],
+                row["mentions"],
+                row["mentions_count"],
+                row["video_duration"],
+                row["video_views"],
+                row["content_count"]
                 ])
             
     driver.close()

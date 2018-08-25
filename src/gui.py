@@ -145,8 +145,18 @@ class App():
                  "hashtags":bool(self.var_hashtags.get()),
                  "numb_of_words":bool(self.var_numb_of_words.get()),
                  "numb_of_char":bool(self.var_numb_of_char.get()),
-                 "full_caption":bool(self.var_full_caption.get())
+                 "full_caption":bool(self.var_full_caption.get()),
+                 "post_link":bool(self.var_post_link.get()),
+                 "post_type":bool(self.var_post_type.get()),
+                 "mentions":bool(self.var_mentions.get()),
+                 "mentions_count":bool(self.var_mentions_count.get()),
+                 "weekday":bool(self.var_weekday.get()),
+                 "month":bool(self.var_month.get()),
+                 "video_duration":bool(self.var_video_duration.get()),
+                 "content_count":bool(self.var_content_count.get()),
+                 "video_views":bool(self.var_video_views.get())
         }  
+        
 
         m = MonThread (self.root, 
                        thread_resultat,
@@ -270,6 +280,25 @@ class App():
         self.var_datetime=tk.IntVar()
         self.var_datetime.set(1)
         
+        self.var_post_link=tk.IntVar()
+        self.var_post_link.set(1)
+        self.var_post_type=tk.IntVar()
+        self.var_post_type.set(1)
+        self.var_mentions=tk.IntVar()
+        self.var_mentions.set(1)
+        self.var_mentions_count=tk.IntVar()
+        self.var_mentions_count.set(1)
+        self.var_weekday=tk.IntVar()
+        self.var_weekday.set(1)
+        self.var_month=tk.IntVar()
+        self.var_month.set(1)
+        self.var_video_duration=tk.IntVar()
+        self.var_video_duration.set(1)
+        self.var_content_count=tk.IntVar()
+        self.var_content_count.set(1)
+        self.var_video_views=tk.IntVar()
+        self.var_video_views.set(1)
+        
         etiqs=['Full caption',
         '# of characters',
         '# of words',
@@ -283,7 +312,17 @@ class App():
         'Tagged accounts',
         '# of tagged accounts',
         'Location URL',
-        'Date & Time']
+        'Date & Time',
+        'Post link',
+        'Post type',
+        'Mentions',
+        '# of mentions',
+        'Weekday',
+        'Month',
+        'Video duration',
+        '# of content',
+        'Video views']
+        
         
         self.b_full_caption = tk.Checkbutton(self.checkbox_area, variable=self.var_full_caption, text=etiqs[0])
         self.b_full_caption.grid(row=1, column=0)
@@ -341,6 +380,42 @@ class App():
         self.b_datetime.grid(row=3, column=1)
         self.checkboxes.append(self.b_datetime)
         
+        self.b_post_link = tk.Checkbutton(self.checkbox_area, variable=self.var_post_link, text=etiqs[14])
+        self.b_post_link.grid(row=3, column=2)
+        self.checkboxes.append(self.b_post_link)
+        
+        self.b_post_type = tk.Checkbutton(self.checkbox_area, variable=self.var_post_type, text=etiqs[15])
+        self.b_post_type.grid(row=3, column=3)
+        self.checkboxes.append(self.b_post_type)
+        
+        self.b_mentions = tk.Checkbutton(self.checkbox_area, variable=self.var_mentions, text=etiqs[16])
+        self.b_mentions.grid(row=3, column=4)
+        self.checkboxes.append(self.b_mentions)
+        
+        self.b_mentions_count = tk.Checkbutton(self.checkbox_area, variable=self.var_mentions_count, text=etiqs[17])
+        self.b_mentions_count.grid(row=3, column=5)
+        self.checkboxes.append(self.b_mentions_count)
+        
+        self.b_weekday = tk.Checkbutton(self.checkbox_area, variable=self.var_weekday, text=etiqs[18])
+        self.b_weekday.grid(row=4, column=0)
+        self.checkboxes.append(self.b_weekday)
+        
+        self.b_month = tk.Checkbutton(self.checkbox_area, variable=self.var_month, text=etiqs[19])
+        self.b_month.grid(row=4, column=1)
+        self.checkboxes.append(self.b_month)
+
+        self.b_video_duration = tk.Checkbutton(self.checkbox_area, variable=self.var_video_duration, text=etiqs[20])
+        self.b_video_duration.grid(row=4, column=2)
+        self.checkboxes.append(self.b_video_duration)
+        
+        self.b_video_views = tk.Checkbutton(self.checkbox_area, variable=self.var_video_views, text=etiqs[22])
+        self.b_video_views.grid(row=4, column=3)
+        self.checkboxes.append(self.b_video_views)
+        
+        self.b_content_count = tk.Checkbutton(self.checkbox_area, variable=self.var_content_count, text=etiqs[21])
+        self.b_content_count.grid(row=4, column=4)
+        self.checkboxes.append(self.b_content_count)
+
         self.b_run = tk.Button(self.log,text="Run", command=self.on_run)
         self.b_run.grid(row=4, column=2)
         
