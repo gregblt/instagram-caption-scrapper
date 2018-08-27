@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import ttk  
 import os
 import scrapper
-
+import csv
 from threading import Thread
 
 from selenium import webdriver
@@ -81,6 +81,13 @@ class App():
             else:
                 filename_str+=filename[0]
             self.folder_path.set(filename_str)
+            print(filename)
+            
+    def browse_user_button(self):
+            # Allow user to select a directory and store it in global var
+            # called folder_path
+            filename = filedialog.askopenfilename()
+            self.entry_val.set(filename)
             print(filename)
     
     
@@ -158,6 +165,12 @@ class App():
         }  
         
 
+        with open(self.entry_val.get(), 'r') as f:
+            reader = csv.reader(f)
+            self.user_list = list(reader)[0]
+            
+        print(self.user_list)
+        
         m = MonThread (self.root, 
                        thread_resultat,
                        self.user_list,
@@ -226,7 +239,7 @@ class App():
         
         self.var_N=tk.StringVar()
         self.var_N.trace('w',check)
-        self.l_N = tk.Label(master=self.user_area,text="Number of post")
+        self.l_N = tk.Label(master=self.user_area,text="How many latest posts to scrape from each Instagram user (leave blank to scrape all)?")
         self.l_N.grid(row=0, column=0)
         self.in_N = tk.Spinbox(master=self.user_area, from_=0,
                                to=999999999999999999,
@@ -235,19 +248,19 @@ class App():
         # usernames
         self.user_list=[]
         
-        def addUser():
-            self.user_list.append(self.entry_val.get())
-            tk.Label(master=self.user_area,text=self.user_list[len(self.user_list)-1]).grid(row=len(self.user_list)+1, column=0)
+#        def addUser():
+#            self.user_list.append(self.entry_val.get())
+#            tk.Label(master=self.user_area,text=self.user_list[len(self.user_list)-1]).grid(row=len(self.user_list)+1, column=0)
 
         
-        self.entry_label = tk.Label(master=self.user_area,text="User to scrap :")
+        self.entry_label = tk.Label(master=self.user_area,text="What Instagram users (without @, separated by comma) you would like to scrape (import TXT file)?")
         self.entry_label.grid(row=1, column=0)
         
         self.entry_val=tk.StringVar()
         self.entry=tk.Entry(master=self.user_area,textvariable=self.entry_val)
         self.entry.grid(row=1,column=1)
         
-        self.entry_button=tk.Button(master=self.user_area,text="Add",command=addUser)
+        self.entry_button=tk.Button(master=self.user_area,text="Browse",command=self.browse_user_button)
         self.entry_button.grid(row=1,column=2)
         
         # Define checkboxes 

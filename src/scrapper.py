@@ -220,11 +220,16 @@ def get_post_list(username,N,driver):
     r=requests.get('https://www.instagram.com/'+username)
     number_of_followers=None
     if(r.status_code==200):
-        	soup=BeautifulSoup(r.content,'lxml')
-        			
-        	objects = json.loads(str(soup).split('<script type="text/javascript">window._sharedData = ')[1].split(';</script>')[0])['entry_data']['ProfilePage'][0]['graphql']['user']
-        	# Get followers count
-        	number_of_followers=objects['edge_followed_by']['count']
+        soup=BeautifulSoup(r.content,'lxml')
+			
+        objects = json.loads(str(soup).split('<script type="text/javascript">window._sharedData = ')[1].split(';</script>')[0])['entry_data']['ProfilePage'][0]['graphql']['user']
+	# Get followers count
+        number_of_followers=objects['edge_followed_by']['count']
+        number_of_post=objects['edge_owner_to_timeline_media']['count']
+        if(N==0):
+            N=number_of_post
+        elif(number_of_post<N):
+            N=number_of_post
 
     driver.get('https://www.instagram.com/'+username)
 	
@@ -274,11 +279,188 @@ def get_post_list(username,N,driver):
         elems=driver.find_elements_by_class_name("Nnq7C.weEfm")
     return {"number_of_followers":number_of_followers,"list":list_a}
 
+def writesheet(sheetname,info):
+    
+    import xlsxwriter
+    
+    
+    workbook = xlsxwriter.Workbook(sheetname)
+    worksheet = workbook.add_worksheet()
+    worksheet.set_column(0,23,width=50)
+    worksheet.set_default_row(40)
+    bolds=[]
+    
+    for i in range(0,24):
+        bold = workbook.add_format({'bold': True})
+        bold.set_border(2)
+        bold.set_align('center')
+        bold.set_align('vcenter')
+        bolds.append(bold)
+        
+    time=workbook.add_format({'num_format': 'hh:mm:ss'})
+    time.set_align('vcenter')
+    time.set_align('center')
+    date=workbook.add_format({'num_format': 'mm/dd/yy'})
+    date.set_align('vcenter')
+    date.set_align('center')
+    percent_fmt = workbook.add_format({'num_format': '0.00%'})
+    percent_fmt.set_align('vcenter')
+    percent_fmt.set_align('center')
+    str_fmt=workbook.add_format()
+    str_fmt.set_align('vcenter')
+    str_fmt.set_align('center')
+    
+    bolds[0].set_bg_color("#bfbfbf")
+    worksheet.write('A1', 'URL of the post',bolds[0])
+    
+    bolds[1].set_bg_color("#7a7979")
+    worksheet.write('B1', 'Full caption',bolds[1])
+    
+    bolds[2].set_bg_color("#6e708e")
+    worksheet.write('C1', 'Number of characters in the caption \n(eliminating hashtags and emojis)',bolds[2])
+    
+    bolds[3].set_bg_color("#7588e8")
+    worksheet.write('D1',
+                    'Number of words in the caption \n(eliminating hashtags and emojis)',bolds[3])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('E1',
+                    'List of hashtags used in the caption',bolds[4])
+    
+    bolds[5].set_bg_color("#e0bc5d")
+    worksheet.write('F1',
+                    'Number of hashtags used in the caption',bolds[5])
+    
+    bolds[6].set_bg_color("#273666")
+    worksheet.write('G1',
+                    'List of emojis used in the caption',bolds[6])
+    
+    bolds[7].set_bg_color("#769636")
+    worksheet.write('H1',
+                    'Number of emojis',bolds[7])
+    
+    bolds[8].set_bg_color("#a91414")
+    worksheet.write('I1',
+                    'Number of likes of the post',bolds[8])
+    
+    bolds[9].set_bg_color("#ff1a1a")
+    worksheet.write('J1',
+                    'Number of views of the post (only for video posts)',bolds[9])
+    
+    bolds[10].set_bg_color("#e0a021")
+    worksheet.write('K1',
+                    'Number of comments of the post',bolds[10])
+    
+    bolds[11].set_bg_color("#f3ef07")
+    worksheet.write('L1',
+                    'Engagement rate of the post',bolds[11])
+    
+    bolds[12].set_bg_color("#8dcc54")
+    worksheet.write('M1',
+                    'List of tagged accounts on the post',bolds[12])
+    
+    bolds[13].set_bg_color("#3f9543")
+    worksheet.write('N1',
+                    'Number of tagged accounts',bolds[13])
+    
+    bolds[14].set_bg_color("#6a95f")
+    worksheet.write('O1',
+                    'List of mentioned accounts in the caption',bolds[14])
+    
+    bolds[15].set_bg_color("#12537d")
+    worksheet.write('P1',
+                    'Number of mentioned accounts',bolds[15])
+    
+    bolds[16].set_bg_color("#ff1eef")
+    worksheet.write('Q1',
+                    'Location URL',bolds[16])
+    
+    bolds[17].set_bg_color("#e5812a")
+    worksheet.write('R1',
+                    'Date when it 12537dwas posted (year/month/day)',bolds[17])
+    
+    bolds[18].set_bg_color("#d61f74")
+    worksheet.write('S1',
+                    'Time when it was posted (24-hour format) (hr:min:sec)',bolds[18])
+    
+    bolds[19].set_bg_color("#89d61f")
+    worksheet.write('T1',
+                    'Day of the week',bolds[19])
+    
+    bolds[20].set_bg_color("#a6f914")
+    worksheet.write('U1',
+                    'Month of the year',bolds[20])
+    
+    bolds[21].set_bg_color("#22b5b5")
+    worksheet.write('V1',
+                    'Post type (Photo, Gallery or Video)',bolds[21])
+    
+    bolds[22].set_bg_color("#574df8")
+    worksheet.write('W1',
+                    'Amount of posts (only for gallery posts)',bolds[22])
+    
+    bolds[23].set_bg_color("#e6ad1f")
+    worksheet.write('X1',
+                    'Duration of video (only for video posts)',bolds[23])
+    
+    # END HEADERS
+    # Write data
+    j=1
+    for row in info:
+        worksheet.write(j,0,row["post_url"],str_fmt)
+        worksheet.write(j,1,row["full_caption"])
+        worksheet.write(j,2,row["number_of_chars"],str_fmt)
+        worksheet.write(j,3,row["number_of_words"],str_fmt)
+        worksheet.write(j,4,row["hashtags"],str_fmt)
+        worksheet.write(j,5,row["number_of_hashtags"],str_fmt)
+        worksheet.write(j,6,row["emojis"],str_fmt)
+        worksheet.write(j,7,row["number_of_emojis"],str_fmt)
+        worksheet.write(j,10,row["comments"],str_fmt)
+        worksheet.write(j,8,row["likes"],str_fmt)
+        try:
+            worksheet.write(j,11,row["engagement_rate"],percent_fmt)
+        except:
+            worksheet.write(j,11,"",str_fmt)
+            pass
+        worksheet.write(j,12,row["tagged_accounts"],str_fmt)
+        worksheet.write(j,13,row["number_of_tagged_accounts"],str_fmt)
+        worksheet.write(j,16,row["location_url"],str_fmt)
+        
+        try:
+            date_object = datetime.strptime(row["date"], "%m/%d/%Y")
+            worksheet.write(j,17,date_object,date)
+        except:
+            worksheet.write(j,17,"",str_fmt)
+            pass
+        
+        try:
+            time_object = datetime.strptime(row["time"], "%H:%M:%S")
+            worksheet.write(j,18,time_object,time)
+        except:
+            worksheet.write(j,18,"",str_fmt)
+            pass
+        
+        worksheet.write(j,19,row['weekday'],str_fmt)
+        worksheet.write(j,20,row['month'],str_fmt)
+        worksheet.write(j,21,row["post_type"],str_fmt)
+        worksheet.write(j,14,row["mentions"],str_fmt)
+        worksheet.write(j,15,row["mentions_count"],str_fmt)
+        worksheet.write(j,23,row["video_duration"],str_fmt)
+        worksheet.write(j,9,row["video_views"],str_fmt)
+        worksheet.write(j,22,row["content_count"],str_fmt)
+        j+=1
+    
+
+    
+    
+    workbook.close()
+
 def scrap(accounts,N,config,output_folder):
+    print(N)
     options = Options()
     options.add_argument("--headless")
-    driver = webdriver.Firefox()
-    #driver = webdriver.Firefox(firefox_options=options)
+    #driver = webdriver.Firefox()
+    driver = webdriver.Firefox(firefox_options=options)
     output_folder=output_folder.replace("\n","")
     data=[]
     for account in accounts:
@@ -289,69 +471,69 @@ def scrap(accounts,N,config,output_folder):
             for link in res["list"]:
                 scrap=scrap_post(link,config,driver)
                 scrap["engagement_rate"]= (scrap["likes"] + scrap["comments"]) / res["number_of_followers"] if config["engagement_rate"] else None
-                scrap["full_caption"]=scrap["full_caption"].replace("\n","") if config["full_caption"] else None
                 data.append(scrap)
                 time.sleep(1)
                 cnt+=1
-                print('%s/%s' % (cnt,N))
+                print('%s/%s' % (cnt,len(res["list"])))
         except Exception as e:
             print(e)
             traceback.print_exc(file=sys.stdout)
             pass
-                
-        with open(output_folder+"/"+account+".csv","w",encoding="utf-8",newline='') as f:
-            spamwriter = csv.writer(f, delimiter=',',quotechar='"',quoting=csv.QUOTE_ALL)
-            spamwriter.writerow(['Post URL',
-                                 'Full Caption',
-                                 '# Of Chars',
-                                 '# Of Words',
-                                 'Hashtags',
-                                 'Number Of Hashtags',
-                                 'Emojis',
-                                 '# Of Emojis',
-                                 '# Of Comments',
-                                 '# Of Likes',
-                                 'Engagement Rate',
-                                 'Tagged Accounts',
-                                 '# Of Tagged Accounts',
-                                 'Location URL',
-                                 'Date',
-                                 'Time',
-                                 'Day',
-                                 'Month',
-                                 'Post Type',
-                                 'Mentions',
-                                 '# Of Mentions',
-                                 'Video Duration',
-                                 'Video Views',
-                                 '# Of Content'
-                                 ])
-            for row in data:
-                spamwriter.writerow([row["post_url"],
-                row["full_caption"],
-                row["number_of_chars"],
-                row["number_of_words"],
-                row["hashtags"],
-                row["number_of_hashtags"],
-                row["emojis"],
-                row["number_of_emojis"],
-                row["comments"],
-                row["likes"],
-                row["engagement_rate"],
-                row["tagged_accounts"],
-                row["number_of_tagged_accounts"],
-                row["location_url"],
-                row["date"],
-                row["time"],
-                row['weekday'],
-                row['month'],
-                row["post_type"],
-                row["mentions"],
-                row["mentions_count"],
-                row["video_duration"],
-                row["video_views"],
-                row["content_count"]
-                ])
+        
+        writesheet(output_folder+"/"+account+".xlsx",data)
+#        with open(output_folder+"/"+account+".csv","w",encoding="utf-8",newline='') as f:
+#            spamwriter = csv.writer(f, delimiter=',',quotechar='"',quoting=csv.QUOTE_ALL)
+#            spamwriter.writerow(['Post URL',
+#                                 'Full Caption',
+#                                 '# Of Chars',
+#                                 '# Of Words',
+#                                 'Hashtags',
+#                                 'Number Of Hashtags',
+#                                 'Emojis',
+#                                 '# Of Emojis',
+#                                 '# Of Comments',
+#                                 '# Of Likes',
+#                                 'Engagement Rate',
+#                                 'Tagged Accounts',
+#                                 '# Of Tagged Accounts',
+#                                 'Location URL',
+#                                 'Date',
+#                                 'Time',
+#                                 'Day',
+#                                 'Month',
+#                                 'Post Type',
+#                                 'Mentions',
+#                                 '# Of Mentions',
+#                                 'Video Duration',
+#                                 'Video Views',
+#                                 '# Of Content'
+#                                 ])
+#            for row in data:
+#                spamwriter.writerow([row["post_url"],
+#                row["full_caption"],
+#                row["number_of_chars"],
+#                row["number_of_words"],
+#                row["hashtags"],
+#                row["number_of_hashtags"],
+#                row["emojis"],
+#                row["number_of_emojis"],
+#                row["comments"],
+#                row["likes"],
+#                row["engagement_rate"],
+#                row["tagged_accounts"],
+#                row["number_of_tagged_accounts"],
+#                row["location_url"],
+#                row["date"],
+#                row["time"],
+#                row['weekday'],
+#                row['month'],
+#                row["post_type"],
+#                row["mentions"],
+#                row["mentions_count"],
+#                row["video_duration"],
+#                row["video_views"],
+#                row["content_count"]
+#                ])
             
     driver.close()
         
