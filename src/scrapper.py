@@ -6,6 +6,7 @@ Created on Wed Aug 22 16:16:34 2018
 @author: gregory
 """
 import time
+import os
 from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import NoSuchElementException
@@ -22,8 +23,17 @@ import sys, traceback
 import csv
 from selenium.webdriver.firefox.options import Options
 
+# Media size, dim, download
+folder_image_location=""
+folder_video_location=""
+folder_gallery_location=""
 
-
+def create_folder(folder):
+    try:
+        os.mkdir(folder)
+    except:
+        pass
+    
 
 def scrap_post(post_link,config,driver):    
    
@@ -149,7 +159,7 @@ def scrap_post(post_link,config,driver):
     month_string=None
     time1 = objects["taken_at_timestamp"]  
     if(config["datetime"]):          
-        datetime_string=datetime.utcfromtimestamp(time1).strftime('%m.%d.%Y|%H:%M:%S')
+        datetime_string=datetime.utcfromtimestamp(time1).strftime('%m/%d/%Y|%H:%M:%S')
         date_string=datetime_string[0:10]
         time_string=datetime_string[11:21]
     if(config["weekday"]):  
@@ -182,15 +192,74 @@ def scrap_post(post_link,config,driver):
             post_type="gallery"
         if(config["content_count"]):
             number_of_content=len(objects["edge_sidecar_to_children"]["edges"])
+            
+    headers={   
+        "user-agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.119 Safari/537.36",
+        'Accept-Encoding': 'gzip, deflate',
+        'Accept-Language': 'en-US,en;q=0.8'
+    }
     
-
+    # Media size, dim, id, links and download
+    media_id=objects["id"]
+    nb_ressources=len(objects["display_resources"])
+    if(objects["__typename"]=="GraphVideo"):
+        folder_out=folder_video_location
+        download_url=[objects["video_url"]]
+        media_dim=[str(objects["display_resources"][nb_ressources-1]['config_width']) \
+        + "x"+str(objects["display_resources"][nb_ressources-1]['config_height'])]
+    elif(objects["__typename"]=="GraphImage"):
+        folder_out=folder_image_location
+        download_url=[objects["display_resources"][nb_ressources-1]['src']]
+        media_dim=[str(objects["display_resources"][nb_ressources-1]['config_width']) \
+        + "x"+str(objects["display_resources"][nb_ressources-1]['config_height'])]
+    else:
+        download_url=[]
+        media_dim=[]
+        folder_out=folder_gallery_location+"gallery_"+str(media_id)+"/"        
+        for obj in objects["edge_sidecar_to_children"]["edges"]:
+            download_url.append(obj['node']["display_resources"][nb_ressources-1]['src'])
+            media_dim.append(str(obj['node']["display_resources"][nb_ressources-1]['config_width']) \
+            + "x"+str(obj['node']["display_resources"][nb_ressources-1]['config_height']))
+        
+        create_folder(folder_out)
+    
+    media_size=[]
+    media_location=[]
+    media_filename=[]
+    import os
+    for idx,file_uri in enumerate(download_url):
+        media_filename.append(os.path.basename(file_uri))
+        path=(folder_out+(os.path.basename(file_uri))).split("?")[0]
+        media_location.append(path)
+        r=requests.get(file_uri,headers=headers)
+        ans_header=r.headers
+        media_size.append(str(int(ans_header.get('content-length'))/1000))
+        if(r.status_code==200):
+            with open(path, 'wb') as f:
+                f.write(r.content)    
+    
+    media_size=",".join(media_size)
+    download_url=",".join(download_url)
+    media_dim=",".join(media_dim)
+    media_location=",".join(media_location)
+    media_filename=",".join(media_filename)
+    
+    # Location
     location_link=None
     if(config["location"] and 'location' in objects):
         if(not objects["location"] == None):
             location_link="https://www.instagram.com/explore/locations/%s/%s/" % (objects["location"]["id"],objects["location"]["slug"])
         
     
-    return {"post_url":post_url,
+    return {
+            "media_size":media_size,
+            "download_url":download_url,
+            "media_dim":media_dim,
+            "media_location":media_location,
+            "media_folder_location":folder_out,
+            "media_id":media_id,
+            "media_filename":media_filename,           
+            "post_url":post_url,
             "full_caption":caption,
             "number_of_chars":number_of_chars,
             "number_of_words":number_of_words,
@@ -267,11 +336,12 @@ def get_post_list(username,N,driver):
                 list_a.append(post.find_element_by_tag_name("a").get_attribute("href"))
                 time.sleep(0.1)
                 post_count+=1
+                print('@{} Getting list of post : {}/{} \r'.format(username,post_count,N))
                 if(post_count==N):
                     end=True
                     break
-                else:
-                    print('%s/%s' % (post_count,N))
+				
+                    
             if(end):
                 break
     
@@ -284,7 +354,7 @@ def writesheet(sheetname,info):
     import xlsxwriter
     
     
-    workbook = xlsxwriter.Workbook(sheetname)
+    workbook = xlsxwriter.Workbook(sheetname,{'strings_to_urls': False})
     worksheet = workbook.add_worksheet()
     worksheet.set_column(0,23,width=50)
     worksheet.set_default_row(40)
@@ -377,7 +447,7 @@ def writesheet(sheetname,info):
     
     bolds[17].set_bg_color("#e5812a")
     worksheet.write('R1',
-                    'Date when it 12537dwas posted (year/month/day)',bolds[17])
+                    'Date when it was posted (year/month/day)',bolds[17])
     
     bolds[18].set_bg_color("#d61f74")
     worksheet.write('S1',
@@ -402,6 +472,35 @@ def writesheet(sheetname,info):
     bolds[23].set_bg_color("#e6ad1f")
     worksheet.write('X1',
                     'Duration of video (only for video posts)',bolds[23])
+    
+    # Media related columns
+    bolds[21].set_bg_color("#22b5b5")
+    worksheet.write('B1',
+                    'Media ID',bolds[21])
+    
+    bolds[22].set_bg_color("#574df8")
+    worksheet.write('C1',
+                    'Downloadable Link',bolds[22])
+    
+    bolds[23].set_bg_color("#e6ad1f")
+    worksheet.write('D1',
+                    'Folder Location on PC of Downloaded Media',bolds[23])
+    
+    bolds[21].set_bg_color("#22b5b5")
+    worksheet.write('E1',
+                    'Media Location PC',bolds[21])
+    
+    bolds[22].set_bg_color("#574df8")
+    worksheet.write('F1',
+                    'Name of The File',bolds[22])
+    
+    bolds[23].set_bg_color("#e6ad1f")
+    worksheet.write('G1',
+                    'Media Resolution (in Pixel)',bolds[23])
+    
+    bolds[23].set_bg_color("#e6ad1f")
+    worksheet.write('H1',
+                    'Size of the Media (in kB)',bolds[23])
     
     # END HEADERS
     # Write data
@@ -429,7 +528,8 @@ def writesheet(sheetname,info):
         try:
             date_object = datetime.strptime(row["date"], "%m/%d/%Y")
             worksheet.write(j,17,date_object,date)
-        except:
+        except Exception as e:
+            print(e)
             worksheet.write(j,17,"",str_fmt)
             pass
         
@@ -448,6 +548,17 @@ def writesheet(sheetname,info):
         worksheet.write(j,23,row["video_duration"],str_fmt)
         worksheet.write(j,9,row["video_views"],str_fmt)
         worksheet.write(j,22,row["content_count"],str_fmt)
+        
+        # Media related columns
+        print(row["download_url"])
+        worksheet.write(j,1,row["media_id"],str_fmt)
+        worksheet.write(j,2,row["download_url"],str_fmt)
+        worksheet.write(j,3,row["media_folder_location"],str_fmt)
+        worksheet.write(j,4,row["media_location"],str_fmt)
+        worksheet.write(j,5,row["media_filename"],str_fmt)
+        worksheet.write(j,6,row["media_dim"],str_fmt)
+        worksheet.write(j,7,row["media_size"],str_fmt)
+        
         j+=1
     
 
@@ -460,12 +571,19 @@ def scrap(accounts,N,config,output_folder):
     options = Options()
     options.add_argument("--headless")
     #driver = webdriver.Firefox()
-    driver = webdriver.Firefox(firefox_options=options)
+    driver = webdriver.Firefox(firefox_options=options,executable_path='../assets/geckodriver')
     output_folder=output_folder.replace("\n","")
     data=[]
     for account in accounts:
         data=[]
         try:
+            global folder_image_location, folder_video_location, folder_gallery_location
+            folder_image_location="./outputs/"+account+"/images/"
+            folder_video_location="./outputs/"+account+"/videos/"
+            folder_gallery_location="./outputs/"+account+"/galleries/"
+            create_folder(folder_image_location)
+            create_folder(folder_video_location)
+            create_folder(folder_gallery_location)
             res=get_post_list(account,N,driver)  
             cnt=0
             for link in res["list"]:
@@ -474,7 +592,7 @@ def scrap(accounts,N,config,output_folder):
                 data.append(scrap)
                 time.sleep(1)
                 cnt+=1
-                print('%s/%s' % (cnt,len(res["list"])))
+                print('@{} Scrapping post : {}/{} \r'.format(account,cnt,len(res["list"])))
         except Exception as e:
             print(e)
             traceback.print_exc(file=sys.stdout)

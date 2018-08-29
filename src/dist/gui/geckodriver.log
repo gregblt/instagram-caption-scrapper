@@ -1,0 +1,10 @@
+1535386997582	geckodriver	INFO	geckodriver 0.20.1
+1535386997601	geckodriver	INFO	Listening on 127.0.0.1:51043
+1535387000602	mozrunner::runner	INFO	Running command: "C:\\Program Files\\Mozilla Firefox\\firefox.exe" "-marionette" "--headless" "-profile" "C:\\Users\\GREGOR~1\\AppData\\Local\\Temp\\rust_mozprofile.2U9DXQ27BKJY"
+*** You are running in headless mode.
+1535387009142	Marionette	INFO	Listening on port 51051
+1535387011541	Marionette	WARN	TLS certificate errors will be ignored for this session
+Unable to read VR Path Registry from C:\Users\Gregory_2\AppData\Local\openvr\openvrpaths.vrpath
+[Parent 8316, Gecko_IOThread] WARNING: pipe error: 109: file z:/build/build/src/ipc/chromium/src/chrome/common/ipc_channel_win.cc, line 346
+[Parent 8316, Gecko_IOThread] WARNING: pipe error: 109: file z:/build/build/src/ipc/chromium/src/chrome/common/ipc_channel_win.cc, line 346
+*** UTM:SVC TimerManager:registerTimer called after profile-before-change notification. Ignoring timer registration for id: telemetry_modules_ping
