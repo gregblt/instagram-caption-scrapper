@@ -59,6 +59,9 @@ def scrap_post(post_link,config,driver):
     number_of_mentions=None
     number_of_chars=None
     number_of_words=None
+    bounds=[0,10000,20000,50000,100000,200000,500000,2000000,5000000]
+    hashtag_rank_list = [[] for i in range(len(bounds))]
+    
     if(config["full_caption"] or config["numb_of_char"] or config["numb_of_words"] or
        config["emojis"] or config["emojis_count"] or
        config["hashtags"] or config["hashtags_count"] or 
@@ -69,7 +72,6 @@ def scrap_post(post_link,config,driver):
         except:
             caption=""
         
-
         # Emojis
         def extract_emojis(str):
           return ''.join(c for c in str if c in emoji.UNICODE_EMOJI)
@@ -78,7 +80,13 @@ def scrap_post(post_link,config,driver):
             emojis=extract_emojis(caption) 
         number_of_emojis=len(emojis) if config["emojis_count"] else None
                                       
-        # Hashtags
+        # Hashtags            
+        def get_rank(n,bounds):
+            for i in range(1,len(bounds)):
+                if(n<bounds[i]):
+                    return i-1
+            return i
+        
         hashtags=[]
         if(config["hashtags"] or config["hashtags_count"]):
             lst=re.findall(r'#([^\s]+)',caption)
@@ -87,6 +95,16 @@ def scrap_post(post_link,config,driver):
                 hashtags=list(set(lst))
         number_of_hashtags=len(hashtags) if config["hashtags_count"] else None
         
+        if(config["hashtags"]):
+            for hashtag in hashtags:
+                post_link="https://www.instagram.com/explore/tags/"+hashtag+"/"
+                r=requests.get(post_link)
+                if(r.status_code==200):
+                    soup=BeautifulSoup(r.content,'lxml')     			
+                    hashtag_objects = json.loads(str(soup).split('<script type="text/javascript">window._sharedData = ')[1].split(';</script>')[0])["entry_data"]["TagPage"][0]["graphql"]['hashtag']
+                    hashtag_posts=hashtag_objects["edge_hashtag_to_media"]["count"]
+                    hashtag_rank_list[get_rank(hashtag_posts,bounds)].append(hashtag)
+            
         # Mentions
         mentions=[]
         if(config["mentions"] or config["mentions_count"]):
@@ -246,12 +264,28 @@ def scrap_post(post_link,config,driver):
     
     # Location
     location_link=None
+    location_name=None
+    location_id=None
+    is_top_nine=None
+    top_nine_rank=None
     if(config["location"] and 'location' in objects):
         if(not objects["location"] == None):
             location_link="https://www.instagram.com/explore/locations/%s/%s/" % (objects["location"]["id"],objects["location"]["slug"])
-        
+            location_name = objects["location"]["name"]
+            location_id = objects["location"]["id"]      
+            r=requests.get(location_link)
+            if(r.status_code==200):
+                soup=BeautifulSoup(r.content,'lxml')  
+                location_objects = json.loads(str(soup).split('<script type="text/javascript">window._sharedData = ')[1].split(';</script>')[0])["entry_data"]["LocationsPage"][0]["graphql"]['location']
+                top_9=[post["node"]["id"] for post in location_objects["edge_location_to_top_posts"]["edges"]]
+                is_top_nine = True if objects["id"] in top_9 else False
+                top_nine_rank = top_9.index(objects["id"])+1 if is_top_nine else None
     
     return {
+            "is_top_nine":is_top_nine,
+            "top_nine_rank":top_nine_rank,
+            "location_name":location_name,
+            "location_id":location_id,
             "media_size":media_size,
             "download_url":download_url,
             "media_dim":media_dim,
@@ -263,6 +297,7 @@ def scrap_post(post_link,config,driver):
             "full_caption":caption,
             "number_of_chars":number_of_chars,
             "number_of_words":number_of_words,
+            "hashtag_rank_list":hashtag_rank_list,
             "hashtags":hashtags,
             "number_of_hashtags":number_of_hashtags,
             "emojis":emojis,
@@ -502,6 +537,85 @@ def writesheet(sheetname,info):
     worksheet.write('H1',
                     'Size of the Media (in kB)',bolds[23])
     
+    # Location related columns
+    bolds[16].set_bg_color("#ff1eef")
+    worksheet.write('BU1',
+                    'Location URL',bolds[16])
+    
+    bolds[16].set_bg_color("#ff1eef")
+    worksheet.write('BV1',
+                    'Location Name',bolds[16])
+    
+    bolds[16].set_bg_color("#ff1eef")
+    worksheet.write('BW1',
+                    'Location ID',bolds[16])
+    
+    bolds[16].set_bg_color("#ff1eef")
+    worksheet.write('BX1',
+                    'Is the post got featured on TOP 9 posts?',bolds[16])
+    
+    bolds[16].set_bg_color("#ff1eef")
+    worksheet.write('BY1',
+                    'In what position it got featured?',bolds[16])
+    
+    # Hashtag related columns
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('S1',
+                    'List of hashtags used in the caption',bolds[4])
+    
+    bolds[5].set_bg_color("#e0bc5d")
+    worksheet.write('T1',
+                    'Number of hashtags used in the caption',bolds[5])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('X1',
+                    '0-10k hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AA1',
+                    '10k-20k hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AD1',
+                    '20k-50k hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AG1',
+                    '50k-100k hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AJ1',
+                    '100k-200k hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AM1',
+                    '200k-500k hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AP1',
+                    '500k-2m hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AS1',
+                    '2m-5m hashtags',bolds[4])
+    
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AV1',
+                    '5m and more hashtags',bolds[4])
+    
+    
+    for x in range(0,9):
+        
+        bolds[5].set_bg_color("#e0bc5d")
+        worksheet.write(0,24+3*x,
+                        '#',bolds[5])
+        
+        bolds[5].set_bg_color("#e0bc5d")
+        worksheet.write(0,25+3*x,
+                        '%',bolds[5])
+
+    
     # END HEADERS
     # Write data
     j=1
@@ -550,7 +664,6 @@ def writesheet(sheetname,info):
         worksheet.write(j,22,row["content_count"],str_fmt)
         
         # Media related columns
-        print(row["download_url"])
         worksheet.write(j,1,row["media_id"],str_fmt)
         worksheet.write(j,2,row["download_url"],str_fmt)
         worksheet.write(j,3,row["media_folder_location"],str_fmt)
@@ -558,6 +671,30 @@ def writesheet(sheetname,info):
         worksheet.write(j,5,row["media_filename"],str_fmt)
         worksheet.write(j,6,row["media_dim"],str_fmt)
         worksheet.write(j,7,row["media_size"],str_fmt)
+        
+        # Location related columns
+        worksheet.write(j,72,row["location_url"],str_fmt)
+        worksheet.write(j,73,row["location_name"],str_fmt)
+        worksheet.write(j,74,row["location_id"],str_fmt)
+        is_top_nine_str = None if row["is_top_nine"] == None else 'YES' if row["is_top_nine"] else 'NO'
+        worksheet.write(j,75,is_top_nine_str,str_fmt)
+        worksheet.write(j,76,row["top_nine_rank"],str_fmt)
+        
+        # Hashtag related columns
+        worksheet.write(j,18,row["hashtags"],str_fmt)
+        worksheet.write(j,19,row["number_of_hashtags"],str_fmt)
+        
+        flatten=[item for sublist in row["hashtag_rank_list"] for item in sublist]
+        for x in range(0,len(row["hashtag_rank_list"])):
+            worksheet.write(j,23+3*x,
+                            ",".join(row["hashtag_rank_list"][x]),str_fmt)
+            worksheet.write(j,24+3*x,
+                            len(row["hashtag_rank_list"][x]),str_fmt)      
+            if(len(flatten)>0):
+                worksheet.write(j,25+3*x,len(row["hashtag_rank_list"][x])/len(flatten),percent_fmt)
+            else:
+                worksheet.write(j,25+3*x,0,percent_fmt)
+    
         
         j+=1
     
@@ -587,18 +724,21 @@ def scrap(accounts,N,config,output_folder):
             res=get_post_list(account,N,driver)  
             cnt=0
             for link in res["list"]:
+                print('@{} Scrapping post : {}/{} \r'.format(account,cnt+1,len(res["list"])))
                 scrap=scrap_post(link,config,driver)
                 scrap["engagement_rate"]= (scrap["likes"] + scrap["comments"]) / res["number_of_followers"] if config["engagement_rate"] else None
                 data.append(scrap)
                 time.sleep(1)
                 cnt+=1
-                print('@{} Scrapping post : {}/{} \r'.format(account,cnt,len(res["list"])))
+                
         except Exception as e:
             print(e)
             traceback.print_exc(file=sys.stdout)
             pass
         
         writesheet(output_folder+"/"+account+".xlsx",data)
+        print('@{} Done'.format(account))
+    driver.close()
 #        with open(output_folder+"/"+account+".csv","w",encoding="utf-8",newline='') as f:
 #            spamwriter = csv.writer(f, delimiter=',',quotechar='"',quoting=csv.QUOTE_ALL)
 #            spamwriter.writerow(['Post URL',
@@ -653,7 +793,7 @@ def scrap(accounts,N,config,output_folder):
 #                row["content_count"]
 #                ])
             
-    driver.close()
+
         
     
     
