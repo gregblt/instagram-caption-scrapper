@@ -6,6 +6,7 @@ Created on Wed Aug 22 16:16:34 2018
 @author: gregory
 """
 import time
+import sys
 import os
 from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
@@ -17,6 +18,7 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+import string
 import re
 import emoji
 import sys, traceback
@@ -28,6 +30,144 @@ folder_image_location=""
 folder_video_location=""
 folder_gallery_location=""
 
+def extract_hash_tags(s):
+    l = s.split("#")[1:]
+    res = []
+    for v in l:
+        res.append(v.split(" ")[0])
+    return res
+
+def get_words(caption):
+    # Remove hashtags
+    lst=extract_hash_tags(caption)
+    if(len(lst)>0):
+        lst=[x.lower() for x in lst]
+        hashtags=list(set(lst))
+        hashtags=sorted(hashtags, key=len, reverse=True)
+    for hashtag in hashtags:
+        caption=caption.replace("#"+hashtag,"")
+    # Remove emojis
+    # Emojis
+    def extract_emojis(str):
+      return ''.join(c for c in str if c in emoji.UNICODE_EMOJI)
+    emojis=extract_emojis(caption) 
+    for emoji1 in emojis:
+        caption=caption.replace(emoji1,"")
+    
+    # Remove mention
+    lst=re.findall(r'@([a-zA-Z0-9._]+)',caption)
+    if(len(lst)>0):
+        lst=[x.lower() for x in lst]
+        mentions=list(set(lst))
+        mentions=sorted(mentions, key=len, reverse=True)
+    for mention in mentions:
+        caption=caption.replace("@"+mention,"")
+    
+    for c in string.punctuation:
+        caption=caption.replace(c,"")
+    
+    l=[word.lower() for word in caption.lstrip().split()]
+    res=[]
+    for w in l:
+        if ascii(w) != "'\\ufe0f'" :
+            res.append(w)
+    return res
+
+def add_overall_analysis(list_data,  config):
+    
+    if(config["hashtags"]):
+        hashtags_overall=[data["hashtags"].split(",") for data in list_data]
+        
+        unique_overall=[]
+        for hashtag_list in hashtags_overall:
+            unique=[]
+            for hashtag in hashtag_list:
+                if(sum([hashtag in hashtag_list_t for hashtag_list_t in hashtags_overall])==1):
+                    unique.append(hashtag)
+            unique_overall.append(unique)
+            
+        hashtag_uniqueness=[]
+        for i in range(0,len(hashtags_overall)):
+            if(len(hashtags_overall[i])==0):
+                hashtag_uniqueness.append(0)
+            else:
+                hashtag_uniqueness.append(
+                        (len(unique_overall[i]))/(len(hashtags_overall[i]))
+                        )
+                
+        old_hashtags=list_data[len(list_data)-1]["hashtags"].split(",")
+        reused_hashtag_count_list=[]
+        reused_hashtag_count_list.append(None)
+        for data in reversed(list_data[:-1]):
+            current_hashtags=data["hashtags"].split(",")
+            reused_hashtag_count_list.insert(0,
+                                             len([value for value in current_hashtags if value in old_hashtags]))
+            old_hashtags=current_hashtags
+                
+        for idx, data_idx in enumerate(list_data):
+            if(config["hashtags"]):
+                data_idx["hashtags_unique"]=unique_overall[idx]
+                data_idx["hashtags_unique_count"]=len(unique_overall[idx])
+                data_idx["hashtag_uniqueness"]=hashtag_uniqueness[idx]
+                data_idx["reused_hashtag_count"]=reused_hashtag_count_list[idx]
+            else:
+                data_idx["hashtags_unique"]=None
+                data_idx["hashtags_unique_count"]=None
+                data_idx["hashtag_uniqueness"]=None
+                data_idx["reused_hashtag_count"]=None
+                
+    if(config["full_caption"]):
+        # Word reused or not
+        words_overall=[]
+        
+        old_words=get_words(list_data[len(list_data)-1]["full_caption"])
+        words_overall.append(old_words)
+        new_words_count_list=[]
+        percent_reused_words_count_list=[]
+        new_words_count_list.append(None)
+        percent_reused_words_count_list.append(None)
+        for data in reversed(list_data[:-1]):
+            current_words=get_words(data["full_caption"])
+            new_words_count_list.insert(0,
+                                             len([value for value in current_words if value not in old_words]))
+            nb_reused=len(current_words)-new_words_count_list[0]
+            percent_reused_words_count_list.insert(0,nb_reused/len(current_words))
+            old_words=current_words
+            words_overall.insert(0,old_words)
+        
+        # Dictionnary uniqueness (overall)old_words=get_words(list_data[len(list_data)-1]["full_caption"])
+        word_unique_overall=[]
+        for word_list in words_overall:
+            word_unique=[]
+            for word in word_list:
+                if(sum([word_list_t.count(word) for word_list_t in words_overall])==1):
+                    word_unique.append(word)
+            word_unique_overall.append(word_unique)
+            
+        dictionnary_uniqueness=[]
+        for i in range(0,len(words_overall)):
+            if(len(words_overall[i])==0):
+                dictionnary_uniqueness.append(0)
+            else:
+                dictionnary_uniqueness.append(
+                        (len(word_unique_overall[i]))/(len(words_overall[i]))
+                        )
+                
+        for idx, data_idx in enumerate(list_data):
+            if(config["full_caption"]):
+                data_idx["reused_word_percent"]=percent_reused_words_count_list[idx]
+                data_idx["new_words_count"]=new_words_count_list[idx]
+                data_idx["dictionnary_uniqueness"]=dictionnary_uniqueness[idx]
+
+            else:
+                data_idx["reused_word_percent"]=None
+                data_idx["new_words_count"]=None
+                data_idx["dictionnary_uniqueness"]=None
+
+                
+            
+    return list_data
+    
 def create_folder(folder):
     try:
         os.mkdir(folder)
@@ -89,7 +229,7 @@ def scrap_post(post_link,config,driver):
         
         hashtags=[]
         if(config["hashtags"] or config["hashtags_count"]):
-            lst=re.findall(r'#([^\s]+)',caption)
+            lst=extract_hash_tags(caption)
             if(len(lst)>0):
                 lst=[x.lower() for x in lst]
                 hashtags=list(set(lst))
@@ -115,15 +255,20 @@ def scrap_post(post_link,config,driver):
         number_of_mentions=len(mentions) if config["mentions_count"] else None
         
         temp_caption=caption
+        # Remove hashtags
+        hashtags=sorted(hashtags, key=len, reverse=True)
+        for hashtag in hashtags:
+            temp_caption=temp_caption.replace("#"+hashtag,"")
         # Remove emojis
         for emoji1 in emojis:
             temp_caption=temp_caption.replace(emoji1,"")
-        # Remove hashtags
-        for hashtag in hashtags:
-            temp_caption=temp_caption.replace("#"+hashtag,"")
         # Remove mention
+        mentions=sorted(mentions, key=len, reverse=True)
         for mention in mentions:
             temp_caption=temp_caption.replace("@"+mention,"")
+            
+        for c in string.punctuation:
+            temp_caption=temp_caption.replace(c,"")
         
         number_of_chars=len(temp_caption) if config["numb_of_char"] else None
         number_of_words=len(temp_caption.split()) if config["numb_of_words"] else None
@@ -391,7 +536,7 @@ def writesheet(sheetname,info):
     
     workbook = xlsxwriter.Workbook(sheetname,{'strings_to_urls': False})
     worksheet = workbook.add_worksheet()
-    worksheet.set_column(0,23,width=50)
+    worksheet.set_column(0,100,width=50)
     worksheet.set_default_row(40)
     bolds=[]
     
@@ -568,6 +713,18 @@ def writesheet(sheetname,info):
     worksheet.write('T1',
                     'Number of hashtags used in the caption',bolds[5])
     
+    bolds[5].set_bg_color("#e0bc5d")
+    worksheet.write('U1',
+                    'List of only unique (most media-related) hashtags used in the caption',bolds[5])
+    
+    bolds[5].set_bg_color("#e0bc5d")
+    worksheet.write('V1',
+                    'Number of unique (most media-related) hashtags used in the post',bolds[5])
+    
+    bolds[5].set_bg_color("#e0bc5d")
+    worksheet.write('W1',
+                    'Hashtag Uniqueness Coefficient ',bolds[5])
+    
     bolds[4].set_bg_color("#bc7760")
     worksheet.write('X1',
                     '0-10k hashtags',bolds[4])
@@ -614,8 +771,23 @@ def writesheet(sheetname,info):
         bolds[5].set_bg_color("#e0bc5d")
         worksheet.write(0,25+3*x,
                         '%',bolds[5])
+        
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AY1',
+                    'Amount of the same hashtags used in the caption from previous post caption',bolds[4])
 
+    # Dictionnary related columns
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('AZ1','Number of new words being used in the post caption in comparison from previous caption (eliminating emojis,tags,hashtags, and words are not case sensitive)',bolds[4])
+
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('BA1','Percentage of the same words being used on second post (elimination of emojis, tags and hashtags being used and words are not case sensitive) (Caption dictonary uniqueness)',bolds[4])
+
+    bolds[4].set_bg_color("#bc7760")
+    worksheet.write('BB1','Uniqueness of the caption based on overall data (based on all posts captions)',bolds[4])
     
+    
+
     # END HEADERS
     # Write data
     j=1
@@ -683,6 +855,9 @@ def writesheet(sheetname,info):
         # Hashtag related columns
         worksheet.write(j,18,row["hashtags"],str_fmt)
         worksheet.write(j,19,row["number_of_hashtags"],str_fmt)
+        worksheet.write(j,20, ",".join(row["hashtags_unique"]),str_fmt)
+        worksheet.write(j,21,row["hashtags_unique_count"],str_fmt)
+        worksheet.write(j,22,row["hashtag_uniqueness"],percent_fmt)
         
         flatten=[item for sublist in row["hashtag_rank_list"] for item in sublist]
         for x in range(0,len(row["hashtag_rank_list"])):
@@ -695,12 +870,15 @@ def writesheet(sheetname,info):
             else:
                 worksheet.write(j,25+3*x,0,percent_fmt)
     
+        worksheet.write(j,50,row["reused_hashtag_count"],str_fmt)
         
+        # Dictionnary related columns
+        worksheet.write(j,51,row["new_words_count"],str_fmt)
+        worksheet.write(j,52,row["reused_word_percent"],percent_fmt)
+        worksheet.write(j,53,row["dictionnary_uniqueness"],percent_fmt)
+            
         j+=1
-    
-
-    
-    
+         
     workbook.close()
 
 def scrap(accounts,N,config,output_folder):
@@ -715,6 +893,8 @@ def scrap(accounts,N,config,output_folder):
         data=[]
         try:
             global folder_image_location, folder_video_location, folder_gallery_location
+            create_folder("./outputs/")
+            create_folder("./outputs/"+account)
             folder_image_location="./outputs/"+account+"/images/"
             folder_video_location="./outputs/"+account+"/videos/"
             folder_gallery_location="./outputs/"+account+"/galleries/"
@@ -723,13 +903,15 @@ def scrap(accounts,N,config,output_folder):
             create_folder(folder_gallery_location)
             res=get_post_list(account,N,driver)  
             cnt=0
-            for link in res["list"]:
+            for link in res["list"]:    
                 print('@{} Scrapping post : {}/{} \r'.format(account,cnt+1,len(res["list"])))
                 scrap=scrap_post(link,config,driver)
                 scrap["engagement_rate"]= (scrap["likes"] + scrap["comments"]) / res["number_of_followers"] if config["engagement_rate"] else None
                 data.append(scrap)
                 time.sleep(1)
                 cnt+=1
+            # Add overall data
+            data=add_overall_analysis(data,config)
                 
         except Exception as e:
             print(e)
