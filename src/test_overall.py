@@ -11,6 +11,7 @@ import json
 import re
 import emoji
 import string
+from collections import Counter
 
 def extract_hash_tags(s):
     l = s.split("#")[1:]
@@ -19,42 +20,6 @@ def extract_hash_tags(s):
         res.append(v.split(" ")[0])
     return res
         
-
-def get_words(caption):
-    # Remove hashtags
-    lst=extract_hash_tags(caption)
-    if(len(lst)>0):
-        lst=[x.lower() for x in lst]
-        hashtags=list(set(lst))
-        hashtags=sorted(hashtags, key=len, reverse=True)
-    for hashtag in hashtags:
-        caption=caption.replace("#"+hashtag,"")
-    # Remove emojis
-    # Emojis
-    def extract_emojis(str):
-      return ''.join(c for c in str if c in emoji.UNICODE_EMOJI)
-    emojis=extract_emojis(caption) 
-    for emoji1 in emojis:
-        caption=caption.replace(emoji1,"")
-    
-    # Remove mention
-    lst=re.findall(r'@([a-zA-Z0-9._]+)',caption)
-    if(len(lst)>0):
-        lst=[x.lower() for x in lst]
-        mentions=list(set(lst))
-        mentions=sorted(mentions, key=len, reverse=True)
-    for mention in mentions:
-        caption=caption.replace("@"+mention,"")
-    
-    for c in string.punctuation:
-        caption=caption.replace(c,"")
-    
-    l=[word.lower() for word in caption.lstrip().split()]
-    res=[]
-    for w in l:
-        if ascii(w) != "'\\ufe0f'" :
-            res.append(w)
-    return res
 
 list_post=["https://www.instagram.com/p/Bm1sVjcAGbf/",
 "https://www.instagram.com/p/Bm1ZJc0gINY/",
@@ -94,8 +59,73 @@ for post_link in list_post:
     
 with open("dat_overall.json","r") as f:
     list_data=json.loads(f.read())
+    
+# emojis
+emojis_overall=[item for sublist in [data["emojis"] for data in list_data] for item in sublist]
+number_of_emojis_average='%.1f'%(len(emojis_overall)/len(list_data))
+emojis_overall=list(set(emojis_overall))
+number_of_emojis_overall=len(emojis_overall)
+
+    
+day=[data['weekday'] for data in list_data]
+most_common,num_most_common = Counter(day).most_common(1)[0]
+
+percent_gallery=None
+percent_image=None
+percent_video=None
+types=[data['post_type'] for data in list_data]
+if  types:
+    percent_gallery=Counter(types)['gallery']/len(types)
+    percent_image=Counter(types)['image']/len(types)
+    percent_video=Counter(types)['video']/len(types)
 
 
+number_of_words_overall= [ data['number_of_words'] for data in list_data ]
+if(len([float(i) for i in number_of_words_overall])>0):
+    number_of_words_average = '%.1f'%(sum([float(i) for i in number_of_words_overall])/len([float(i) for i in number_of_words_overall]))
+else:
+    number_of_words_average = 0
+    
+number_of_hashtags_average = None
+if([ data['number_of_hashtags'] for data in list_data ]):
+    number_of_hashtags_average = '%.1f'%(sum([ data['number_of_hashtags'] for data in list_data ])/len([ data['number_of_hashtags'] for data in list_data ]))
+else:
+    number_of_hashtags_average = 0
+
+hashtags_overall=[data["hashtags"].split(",") for data in list_data]
+
+unique_overall=[]
+non_unique_overall=[]
+for hashtag_list in hashtags_overall:
+    unique=[]
+    non_unique=[]
+    for hashtag in hashtag_list:
+        if(sum([hashtag in hashtag_list_t for hashtag_list_t in hashtags_overall])==1):
+            unique.append(hashtag)
+        else:
+            non_unique.append(hashtag)
+    unique_overall.append(unique)
+    non_unique_overall.append(non_unique)
+    
+hashtag_uniqueness=[]
+for i in range(0,len(hashtags_overall)):
+    if(len(hashtags_overall[i])==0):
+        hashtag_uniqueness.append(0)
+    else:
+        hashtag_uniqueness.append(
+                (len(unique_overall[i]))/(len(hashtags_overall[i]))
+                )
+        
+old_hashtags=list_data[len(list_data)-1]["hashtags"].split(",")
+reused_hashtag_count_list=[]
+reused_hashtag_count_list.append(None)
+for data in reversed(list_data[:-1]):
+    current_hashtags=data["hashtags"].split(",")
+    reused_hashtag_count_list.insert(0,
+                                     len([value for value in current_hashtags if value in old_hashtags]))
+    old_hashtags=current_hashtags
+    
+    
 # Hashtags reused
 old_hashtags=list_data[len(list_data)-1]["hashtags"].split(",")
 reused_hashtag_count_list=[]
@@ -129,12 +159,20 @@ for data in reversed(list_data[:-1]):
 
 # Dictionnary uniqueness (overall)old_words=get_words(list_data[len(list_data)-1]["full_caption"])
 word_unique_overall=[]
+word_non_unique_overall=[]
 for word_list in words_overall:
     word_unique=[]
+    word_non_unique=[]
     for word in word_list:
         if(sum([word_list_t.count(word) for word_list_t in words_overall])==1):
             word_unique.append(word)
+        else:
+            word_non_unique.append(word)
+    word_non_unique_overall.append(word_non_unique)
     word_unique_overall.append(word_unique)
+    
+word_unique_overall_flat=list(set([item for sublist in word_unique_overall for item in sublist]))
+word_non_unique_overall_flat=list(set([item for sublist in word_non_unique_overall for item in sublist]))
     
 dictionnary_uniqueness=[]
 for i in range(0,len(words_overall)):
@@ -145,5 +183,10 @@ for i in range(0,len(words_overall)):
                 (len(word_unique_overall[i]))/(len(words_overall[i]))
                 )
 
-data2 = scrapper.add_overall_analysis(list_data,config)
+hashtag_rank_list_overall=[[] for i in range(len(data['hashtag_rank_list']))]
+for idx in range(0,len(data['hashtag_rank_list'])):
+    hashtag_rank_list_overall[idx]=([item for sublist in [data['hashtag_rank_list'][idx] for data in list_data] for item in sublist])
+
+
+a,b = scrapper.add_overall_analysis(list_data,config)
         

@@ -21,6 +21,7 @@ from datetime import datetime
 import string
 import re
 import emoji
+from collections import Counter
 import sys, traceback
 import csv
 from selenium.webdriver.firefox.options import Options
@@ -75,16 +76,23 @@ def get_words(caption):
 
 def add_overall_analysis(list_data,  config):
     
+    global_data = {}
+    
     if(config["hashtags"]):
         hashtags_overall=[data["hashtags"].split(",") for data in list_data]
         
         unique_overall=[]
+        non_unique_overall=[]
         for hashtag_list in hashtags_overall:
             unique=[]
+            non_unique=[]
             for hashtag in hashtag_list:
                 if(sum([hashtag in hashtag_list_t for hashtag_list_t in hashtags_overall])==1):
                     unique.append(hashtag)
+                else:
+                    non_unique.append(hashtag)
             unique_overall.append(unique)
+            non_unique_overall.append(non_unique)
             
         hashtag_uniqueness=[]
         for i in range(0,len(hashtags_overall)):
@@ -103,18 +111,25 @@ def add_overall_analysis(list_data,  config):
             reused_hashtag_count_list.insert(0,
                                              len([value for value in current_hashtags if value in old_hashtags]))
             old_hashtags=current_hashtags
-                
+       
+        # Rank list overall
+        hashtag_rank_list_overall=[[] for i in range(len(data['hashtag_rank_list']))]
+        for idx in range(0,len(data['hashtag_rank_list'])):
+            hashtag_rank_list_overall[idx]=([item for sublist in [data['hashtag_rank_list'][idx] for data in list_data] for item in sublist])
+              
         for idx, data_idx in enumerate(list_data):
             if(config["hashtags"]):
                 data_idx["hashtags_unique"]=unique_overall[idx]
                 data_idx["hashtags_unique_count"]=len(unique_overall[idx])
                 data_idx["hashtag_uniqueness"]=hashtag_uniqueness[idx]
                 data_idx["reused_hashtag_count"]=reused_hashtag_count_list[idx]
+
             else:
                 data_idx["hashtags_unique"]=None
                 data_idx["hashtags_unique_count"]=None
                 data_idx["hashtag_uniqueness"]=None
                 data_idx["reused_hashtag_count"]=None
+
                 
     if(config["full_caption"]):
         # Word reused or not
@@ -164,9 +179,92 @@ def add_overall_analysis(list_data,  config):
                 data_idx["new_words_count"]=None
                 data_idx["dictionnary_uniqueness"]=None
 
-                
-            
-    return list_data
+    # Average media size
+    
+    media_size_overall= [item for sublist in [ data['media_size'].split(",") for data in list_data ] for item in sublist]
+    if(len([float(i) for i in media_size_overall])>0):
+        media_size_average = '%.3f'%(sum([float(i) for i in media_size_overall])/len([float(i) for i in media_size_overall]))
+    else:
+        media_size_average = 0
+
+    # Average amount of post per day
+    
+    first_date = datetime.strptime(list_data[len(list_data)-1]["date"],"%m/%d/%Y")
+    last_date = datetime.strptime(list_data[0]["date"],"%m/%d/%Y")
+    delta=(last_date-first_date).days
+    if(len(list_data)>0):
+        post_amount_average=delta/len(list_data)
+    else:
+        post_amount_average=0
+        
+    # Most common day for posting
+    most_common_day=None
+    days=[data['weekday'] for data in list_data]
+    if(len(days)>0):
+        most_common_day,num_most_common = Counter(days).most_common(1)[0]
+        
+    # Percentage of each tyopepe of post
+    percent_gallery=None
+    percent_image=None
+    percent_video=None
+    types=[data['post_type'] for data in list_data]
+    if types:
+        percent_gallery=Counter(types)['gallery']/len(types)
+        percent_image=Counter(types)['image']/len(types)
+        percent_video=Counter(types)['video']/len(types)
+        
+    # Average number of words
+    number_of_words_overall= [ data['number_of_words'] for data in list_data ]
+    if(len([float(i) for i in number_of_words_overall])>0):
+        number_of_words_average = '%.1f'%(sum([float(i) for i in number_of_words_overall])/len([float(i) for i in number_of_words_overall]))
+    else:
+        number_of_words_average = 0
+        
+    # Average number of hashtags
+    number_of_hashtags_average = None
+    if([ data['number_of_hashtags'] for data in list_data ]):
+        number_of_hashtags_average = '%.1f'%(sum([ data['number_of_hashtags'] for data in list_data ])/len([ data['number_of_hashtags'] for data in list_data ]))
+    else:
+        number_of_hashtags_average = 0
+        
+    # emojis
+    emojis_overall=None
+    number_of_emojis_overall=None
+    number_of_emojis_average=None
+    if(list_data):
+        emojis_overall=[item for sublist in [data["emojis"] for data in list_data] for item in sublist]
+        number_of_emojis_average='%.1f'%(len(emojis_overall)/len(list_data))
+        emojis_overall=list(set(emojis_overall))
+        number_of_emojis_overall=len(emojis_overall)
+        
+    print(emojis_overall)
+    
+    # Overall data object 
+    
+    global_data={"media_size_average":None,
+                 "unique_hashtags":None,
+                 "repetitive_hashtags":None,
+                 "hashtag_rank_list_overall":None,
+                 "emojis_overall":None,
+                 "number_of_emojis_overall":None,
+                 "number_of_emojis_average":None}
+
+    global_data['media_size_average'] = media_size_average    
+    global_data['post_amount_average'] = post_amount_average   
+    global_data['most_common_day'] = most_common_day
+    global_data['percent_gallery'] = percent_gallery
+    global_data['percent_video'] = percent_video
+    global_data['percent_image'] = percent_image
+    global_data['number_of_words_average'] = number_of_words_average
+    global_data['number_of_hashtags_average'] = number_of_hashtags_average
+    global_data['unique_hashtags'] = list(set([item for sublist in unique_overall for item in sublist]))
+    global_data['repetitive_hashtags'] = list(set([item for sublist in non_unique_overall for item in sublist]))
+    global_data["hashtag_rank_list_overall"] = hashtag_rank_list_overall
+    global_data["emojis_overall"] = emojis_overall
+    global_data["number_of_emojis_overall"] = number_of_emojis_overall
+    global_data["number_of_emojis_average"] = number_of_emojis_average
+    
+    return (global_data,list_data)
     
 def create_folder(folder):
     try:
@@ -529,10 +627,11 @@ def get_post_list(username,N,driver):
         elems=driver.find_elements_by_class_name("Nnq7C.weEfm")
     return {"number_of_followers":number_of_followers,"list":list_a}
 
-def writesheet(sheetname,info):
+def writesheet(sheetname,info,overall_data):
     
     import xlsxwriter
     
+    # First sheet
     
     workbook = xlsxwriter.Workbook(sheetname,{'strings_to_urls': False})
     worksheet = workbook.add_worksheet()
@@ -878,6 +977,90 @@ def writesheet(sheetname,info):
         worksheet.write(j,53,row["dictionnary_uniqueness"],percent_fmt)
             
         j+=1
+        
+    # Second sheet
+    worksheet = workbook.add_worksheet()
+    worksheet.set_column(0,1,width=50)
+    
+    worksheet.write(0,0,"GENERAL ANALYSIS OF THE ACCOUNT",str_fmt)
+
+    lines=["Average size of the media (image or video) (in KB)",
+    "Average amount of posts per day (24-hour period)",
+    "Day of the week account posting the most of the content",
+    "Percentage of video content",
+    "Percentage of image content",
+    "Percentage of gallery content",
+    "Average amount of words being used in the caption (eliminating hashtags and emoji's)",
+    "Amount of unique words being used on all captions",
+    "Average amount of hashtags being used in the caption",
+    "List of repetitive hashtags used in captions (mostly used)",
+    "List of repetitive hashtags used in captions (mostly used) (spin syntax format)",
+    "List of unique hashtags used in captions",
+    "List of unique hashtags used in captions (spin syntax format)",
+    "Hashtag Uniqueness in the captions",
+    "Average percentage rate of the same hashtags being used on every caption",
+    "How many hashtags account got featured under any of the TOP 9 posts (all unique hashtags / got featured)?",
+    "Which category of hashtags account used the most in the captions?",
+    "Average percentage rate of the same words being used on every caption",
+    "Average amount of emojis being used in the captions",
+    "Spintax of all emojis being used",
+    "Average amount of tagged accounts on the post",
+    "Average amount of mentioned accounts in the caption",
+    "Average amount of likes of the post",
+    "Average amount of comments of the post",
+    "Average percentage rate of GHOST LIKERS (the higher percentage rate shows how likely account has fake followers or uses engagement pods/like rounds)",
+    "Average percentage rate of GHOST COMMENTERS (the higher percentage rate shows how likely account has fake comments or either uses automated comment pods",
+    "Average engagement rate of the post",
+    "Average amount of locations tagged on the post (can't be higher than 1; 1 means that all posts had their locations tagged)",
+    "How many times did account got featured on any of TOP 9 posts under any of the used tagged locations?",
+    "Predictive account age (only if you chose to scrape all account posts) or for how long account has been posting",
+    "List of 0k-10k hashtags (duplicates removed)",
+    "List of 10k-20k hashtags (duplicates removed)",
+    "List of 20k-50k hashtags (duplicates removed)",
+    "List of 50k-100k hashtags (duplicates removed)",
+    "List of 100k-200k hashtags (duplicates removed)",
+    "List of 200k-500k hashtags (duplicates removed)",
+    "List of 500k-2M hashtags (duplicates removed)",
+    "List of 2M-5M hashtags (duplicates removed)",
+    "List of 5M-999M hashtags (duplicates removed)",
+    "Caption uniqueness (OVERALL)",
+    "Hashtag uniqueness",
+    "Dictionary uniqueness",
+    "Amount of different emojis",
+    "List of all emojis used (duplicates removed)",
+    "List of tagged accounts (duplicates removed)",
+    "List of mentioned accounts (duplicates removed)",
+    "List of tagged locations' URLs (duplicates removed)"]
+                
+    for idx, val in enumerate(lines):
+        worksheet.write(idx+1,0,val,str_fmt)
+       
+    # ADD VALUES
+    
+    worksheet.write(1,1,overall_data['media_size_average'])
+    worksheet.write(2,1,overall_data['post_amount_average'])
+    worksheet.write(3,1,overall_data['most_common_day'])
+    worksheet.write(6,1,overall_data['percent_gallery'],percent_fmt)
+    worksheet.write(4,1,overall_data['percent_video'],percent_fmt)
+    worksheet.write(5,1,overall_data['percent_image'],percent_fmt)
+    
+    worksheet.write(7,1,overall_data['number_of_words_average'])
+    worksheet.write(9,1,overall_data['number_of_hashtags_average'])
+    
+    worksheet.write(10,1,",".join(overall_data['repetitive_hashtags']))
+    worksheet.write(11,1,"{"+"|".join(overall_data['repetitive_hashtags'])+"}")
+    worksheet.write(12,1,",".join(overall_data['unique_hashtags']))
+    worksheet.write(13,1,"{"+"|".join(overall_data['unique_hashtags'])+"}")
+    
+    worksheet.write(19,1,overall_data['number_of_emojis_average'])
+    worksheet.write(20,1,"{"+"|".join(overall_data['emojis_overall'])+"}")
+    
+    worksheet.write(43,1,overall_data['number_of_emojis_overall'])
+    worksheet.write(44,1,",".join(overall_data['emojis_overall']))
+    
+    for idx, val in enumerate(overall_data["hashtag_rank_list_overall"]):
+        worksheet.write(31+idx,1,",".join(val))
+    
          
     workbook.close()
 
@@ -891,6 +1074,7 @@ def scrap(accounts,N,config,output_folder):
     data=[]
     for account in accounts:
         data=[]
+        global_data={}
         try:
             global folder_image_location, folder_video_location, folder_gallery_location
             create_folder("./outputs/")
@@ -911,14 +1095,14 @@ def scrap(accounts,N,config,output_folder):
                 time.sleep(1)
                 cnt+=1
             # Add overall data
-            data=add_overall_analysis(data,config)
+            (global_data,data)=add_overall_analysis(data,config)
                 
         except Exception as e:
             print(e)
             traceback.print_exc(file=sys.stdout)
             pass
         
-        writesheet(output_folder+"/"+account+".xlsx",data)
+        writesheet(output_folder+"/"+account+".xlsx",data,global_data)
         print('@{} Done'.format(account))
     driver.close()
 #        with open(output_folder+"/"+account+".csv","w",encoding="utf-8",newline='') as f:
